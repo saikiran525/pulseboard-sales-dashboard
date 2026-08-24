@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pulseboard | Sales intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">P</span><span>pulseboard</span></div>
+    <div class="workspace-label">WORKSPACE</div>
+    <button class="nav-item active"><span>◈</span> Overview</button>
+    <button class="nav-item" id="resetButton"><span>↻</span> Reset to sample</button>
+    <div class="sidebar-bottom"><div class="status-dot"></div><div><strong>Local analysis</strong><small>Your files stay on your machine</small></div></div>
+  </aside>
+  <main class="main-content">
+    <header class="topbar"><div><p class="eyebrow">SALES INTELLIGENCE / OVERVIEW</p><h1>Good morning, analyst.</h1><p class="muted">A clear view of what is moving your business forward.</p></div><div class="date-chip"><span class="live-dot"></span><span id="datasetName">Sample dataset</span></div></header>
+    <section class="upload-strip"><div class="upload-copy"><div class="upload-icon">↑</div><div><strong>Bring your own sales data</strong><p>CSV files work best. We’ll calculate the dashboard in seconds.</p></div></div><label class="upload-button">Upload CSV<input type="file" id="fileInput" accept=".csv,text/csv"></label></section>
+    <div id="errorBox" class="error-box" hidden></div>
+    <section class="metrics-grid" id="metricGrid"></section>
+    <section class="dashboard-grid">
+      <article class="panel trend-panel"><div class="panel-heading"><div><p class="eyebrow">PERFORMANCE</p><h2>Revenue trend</h2></div><div class="legend"><span class="legend-line"></span>Revenue</div></div><div class="chart-wrap"><canvas id="trendChart"></canvas></div></article>
+      <article class="panel category-panel"><div class="panel-heading"><div><p class="eyebrow">MIX</p><h2>Category share</h2></div></div><div class="chart-wrap donut-wrap"><canvas id="categoryChart"></canvas></div><div id="categoryLegend" class="category-legend"></div></article>
+    </section>
+    <section class="lower-grid"><article class="panel products-panel"><div class="panel-heading"><div><p class="eyebrow">PRODUCTS</p><h2>Top performers</h2></div><span class="subtle-label">By revenue</span></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Revenue</th><th>Share</th></tr></thead><tbody id="productsBody"></tbody></table></div></article><article class="panel suggestions-panel"><div class="panel-heading"><div><p class="eyebrow">DECISION SUPPORT</p><h2>What to do next</h2></div><span class="ai-badge">✦ AI INSIGHTS</span></div><div id="suggestions" class="suggestions"></div></article></section>
+    <footer>Pulseboard <span>•</span> built for focused decisions <span>•</span> <span id="rowCount">0 rows analyzed</span></footer>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
