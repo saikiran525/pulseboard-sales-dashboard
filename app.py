@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__)
 
 REQUIRED_COLUMNS = {"date", "product", "quantity"}
+SUPPORTED_EXTENSIONS = {".csv", ".xlsx"}
 COLUMN_ALIASES = {
     "order_date": "date",
     "transaction_date": "date",
@@ -64,6 +66,50 @@ def money(value):
     return round(float(value), 2)
 
 
+def forecast_revenue(monthly, periods=3):
+    """Forecast monthly revenue with a local trend model and a confidence score."""
+    history = monthly["revenue"].astype(float).to_numpy()
+    if len(history) == 0:
+        return [], 0, "Insufficient history"
+
+    window = min(len(history), 6)
+    recent = history[-window:]
+    if len(recent) == 1:
+        slope = 0
+        intercept = recent[0]
+        baseline = recent[-1]
+    else:
+        x_values = np.arange(len(recent), dtype=float)
+        slope, intercept = np.polyfit(x_values, recent, 1)
+        baseline = intercept + slope * (len(recent) - 1)
+
+    fitted = intercept + slope * np.arange(len(recent))
+    error = float(np.mean(np.abs(recent - fitted)))
+    scale = max(float(np.mean(recent)), 1)
+    confidence = int(np.clip(100 - (error / scale * 100), 35, 96))
+    last_month = pd.Period(monthly.iloc[-1]["month"], freq="M")
+    predictions = []
+    for offset in range(1, periods + 1):
+        predicted = max(0, baseline + slope * offset)
+        predictions.append({"month": str(last_month + offset), "revenue": money(predicted)})
+    direction = "rising" if slope > scale * 0.02 else "falling" if slope < -scale * 0.02 else "steady"
+    return predictions, confidence, direction
+
+
+def load_upload(upload):
+    extension = Path(upload.filename).suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise ValueError("Upload a CSV or Excel workbook (.xlsx) file.")
+    if extension == ".xlsx":
+        workbook = pd.ExcelFile(upload)
+        for sheet in workbook.sheet_names:
+            frame = pd.read_excel(workbook, sheet_name=sheet)
+            if not frame.dropna(how="all").empty:
+                return frame, f"{upload.filename} / {sheet}"
+        raise ValueError("The Excel workbook does not contain a non-empty sheet.")
+    return pd.read_csv(upload), upload.filename
+
+
 def analyze(frame):
     frame = prepare_data(frame)
     frame["month"] = frame["date"].dt.to_period("M").astype(str)
@@ -72,6 +118,7 @@ def analyze(frame):
     products = frame.groupby(["product", "category"], as_index=False).agg(revenue=("revenue", "sum"), units=("quantity", "sum"), orders=("product", "size"))
     products = products.sort_values("revenue", ascending=False)
     categories = frame.groupby("category", as_index=False).agg(revenue=("revenue", "sum"), units=("quantity", "sum")).sort_values("revenue", ascending=False)
+    forecast, confidence, forecast_direction = forecast_revenue(monthly)
 
     total_revenue = frame["revenue"].sum()
     best_month = monthly.loc[monthly["revenue"].idxmax()]
@@ -88,10 +135,20 @@ def analyze(frame):
         weakest = products.iloc[-1]
         suggestions.append({"type": "insight", "title": "Give the long tail a job", "body": f"{weakest['product']} is the lowest revenue product. Try a small experiment: reposition it, bundle it, or reduce replenishment until demand improves."})
     suggestions.append({"type": "tip", "title": "Watch the next decision", "body": f"Average order value is ${avg_order:,.0f}. Use this as your baseline when judging promotions and cross-sell tests."})
+    if forecast:
+        next_month = forecast[0]
+        if forecast_direction == "rising":
+            suggestions.append({"type": "forecast", "title": "Prepare for the next lift", "body": f"The local model projects {money(next_month['revenue'])} in {next_month['month']}. Protect stock for {top_product['product']} and plan capacity before demand arrives."})
+        elif forecast_direction == "falling":
+            suggestions.append({"type": "warning", "title": "Act before the slowdown", "body": f"The local model points to {money(next_month['revenue'])} in {next_month['month']}. Test a targeted offer and check inventory on your strongest products now."})
+        else:
+            suggestions.append({"type": "forecast", "title": "Plan around a steady baseline", "body": f"The local model projects {money(next_month['revenue'])} in {next_month['month']}. Use this baseline to evaluate campaign and pricing experiments."})
 
     return {
         "summary": {"revenue": money(total_revenue), "units": int(frame["quantity"].sum()), "orders": int(len(frame)), "avg_order": money(avg_order), "growth": round(latest_growth, 1), "best_month": best_month["month"], "top_product": top_product["product"]},
         "monthly": [{"month": row.month, "revenue": money(row.revenue), "units": int(row.units), "growth": round(float(row.growth), 1)} for row in monthly.itertuples()],
+        "forecast": forecast,
+        "forecast_meta": {"confidence": confidence, "direction": forecast_direction, "method": "Recent 6-month trend model"},
         "products": [{"product": row.product, "category": row.category, "revenue": money(row.revenue), "units": int(row.units), "orders": int(row.orders), "share": round(row.revenue / total_revenue * 100, 1)} for row in products.head(8).itertuples()],
         "categories": [{"category": row.category, "revenue": money(row.revenue), "units": int(row.units)} for row in categories.itertuples()],
         "suggestions": suggestions,
@@ -108,8 +165,7 @@ def index():
 def api_analyze():
     try:
         if "file" in request.files and request.files["file"].filename:
-            frame = pd.read_csv(request.files["file"])
-            source = request.files["file"].filename
+            frame, source = load_upload(request.files["file"])
         else:
             frame = demo_data()
             source = "Built-in sample dataset"
@@ -121,4 +177,4 @@ def api_analyze():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get("FLASK_DEBUG", "1") == "1", host="0.0.0.0", port=int(os.environ.get("PORT", "5000")))
