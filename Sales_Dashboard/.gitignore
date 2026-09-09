@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.vscode/
+.DS_Store
+
+# Local and raw datasets
+archive/
+E-commerce_Customer_Segmentation_2026.csv
+
+# Generated deployment and runtime files
+*.log
+render-build/
